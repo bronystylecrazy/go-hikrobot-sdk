@@ -164,7 +164,9 @@ HIKROBOT_TEST=grab go test -v -run Hardware      # exclusive: configures the cam
 
 `runtime` mode has passed against the real runtimes of MVS 4.8 on Windows
 x64, MVS 5.1 on Linux aarch64, and MVS 5.0 (SDK 4.7) on macOS arm64 and
-x86_64.
+x86_64. `grab` mode, and the `grab` example with and without software
+trigger, have passed on Windows x64 with an MV-CS200-10GC (20 MP BayerGB8,
+GigE).
 
 ## How it works
 
