@@ -1,8 +1,10 @@
 package hikrobot
 
 // Go mirrors of the MVS C structs, checked against CameraParams.h from MVS
-// 4.8 compiled for x86_64-pc-windows-msvc (see layout_test.go). Pointers and
-// int64 fields are 8-byte aligned, as in Go on 64-bit targets.
+// 4.8 compiled for x86_64-pc-windows-msvc and for aarch64/x86_64 Linux (see
+// layout_test.go). Pointers and int64 fields are 8-byte aligned, as in Go on
+// 64-bit targets. Pixel-type fields are C enums, whose size differs by
+// compiler; see pixelEnum.
 
 // MV_CC_DEVICE_INFO. Special is the per-transport union.
 type deviceInfo struct {
@@ -54,7 +56,8 @@ type stringValue struct {
 // MV_FRAME_OUT_INFO_EX
 type frameInfo struct {
 	Width, Height                                                 uint16
-	PixelType, Number, DeviceTimeHigh, DeviceTimeLow, Reserved0   uint32
+	PixelType                                                     pixelEnum
+	Number, DeviceTimeHigh, DeviceTimeLow, Reserved0              uint32
 	HostTime                                                      int64
 	Length, Seconds, Cycles, CycleOffset                          uint32
 	Gain, Exposure                                                float32
@@ -79,9 +82,11 @@ type frameOut struct {
 
 // MV_CC_PIXEL_CONVERT_PARAM_EX
 type pixelConvert struct {
-	Width, Height, SourcePixelType     uint32
+	Width, Height                      uint32
+	SourcePixelType                    pixelEnum
 	Source                             *byte
-	SourceLength, DestinationPixelType uint32
+	SourceLength                       uint32
+	DestinationPixelType               pixelEnum
 	Destination                        *byte
 	DestinationLength, DestinationSize uint32
 	Reserved                           [4]uint32

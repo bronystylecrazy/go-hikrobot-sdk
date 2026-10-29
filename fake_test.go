@@ -388,3 +388,32 @@ func TestFakeCloseWhileGrabbing(t *testing.T) {
 	}
 	<-done
 }
+
+func TestFakeConverter(t *testing.T) {
+	sdk := loadFake(t)
+	k, err := sdk.NewConverter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := NewFrame(4, 2, BayerGB8, []byte{10, 20, 30, 40, 50, 60, 70, 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Release()
+	img, err := k.Image(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := img.RGBAAt(1, 1); c.R != 60 || c.G != 30 || c.B != 195 {
+		t.Fatalf("pixel %+v", c)
+	}
+	if err := k.SetBayerQuality(BayerOptimal); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Image(f); !errors.Is(err, ErrClosed) {
+		t.Fatalf("convert after Close: %v", err)
+	}
+}

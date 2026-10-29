@@ -6,17 +6,18 @@ import (
 	"time"
 )
 
-// Hardware tests need MVS and a camera, so they run only when asked:
+// Hardware tests need the MVS runtime, so they run only when asked:
 //
-//	HIKROBOT_TEST=monitor  read-only (GigE); works beside a program holding AccessControl
+//	HIKROBOT_TEST=runtime  no camera needed: load, enumerate and convert
+//	HIKROBOT_TEST=monitor  also reads camera nodes (GigE); works beside a program holding AccessControl
 //	HIKROBOT_TEST=grab     exclusive: configures the camera and grabs frames
 //
 // HIKROBOT_SDK overrides the runtime path; HIKROBOT_CAMERA picks a camera by
 // serial, IP, model or user name.
-func openTestCamera(t *testing.T) (*SDK, *Camera, string) {
+func loadTestSDK(t *testing.T) (*SDK, string) {
 	mode := os.Getenv("HIKROBOT_TEST")
 	if mode == "" {
-		t.Skip("set HIKROBOT_TEST=monitor or grab to run against a camera")
+		t.Skip("set HIKROBOT_TEST=runtime, monitor or grab to run against the MVS runtime")
 	}
 	sdk, err := Load(os.Getenv("HIKROBOT_SDK"))
 	if err != nil {
@@ -24,6 +25,14 @@ func openTestCamera(t *testing.T) (*SDK, *Camera, string) {
 	}
 	t.Cleanup(func() { _ = sdk.Close() })
 	t.Logf("MVS runtime %s", sdk.Version())
+	return sdk, mode
+}
+
+func openTestCamera(t *testing.T) (*SDK, *Camera, string) {
+	sdk, mode := loadTestSDK(t)
+	if mode == "runtime" {
+		t.Skip("set HIKROBOT_TEST=monitor or grab to use a camera")
+	}
 	devices, err := sdk.Devices(0)
 	if err != nil {
 		t.Fatal(err)
@@ -93,10 +102,23 @@ func TestHardwareNodes(t *testing.T) {
 	}
 }
 
-// The SDK converts any buffer through any open handle, so a synthetic frame
-// checks conversion without grabbing.
-func TestHardwareConvertSynthetic(t *testing.T) {
-	_, cam, _ := openTestCamera(t)
+// TestHardwareRuntime needs no camera: the SDK converts through a handle that
+// was never opened, which also checks the pixel-conversion struct layout.
+func TestHardwareRuntime(t *testing.T) {
+	sdk, _ := loadTestSDK(t)
+	if sdk.Version() == "" {
+		t.Error("no runtime version")
+	}
+	devices, err := sdk.Devices(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d camera(s)", len(devices))
+	k, err := sdk.NewConverter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Close()
 	const w, h = 64, 48
 	data := make([]byte, w*h)
 	for y := 0; y < h; y++ {
@@ -111,23 +133,31 @@ func TestHardwareConvertSynthetic(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Release()
-	img, err := cam.Image(f)
+	img, err := k.Image(f)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c := img.RGBAAt(w/2, h/2); c.R < 100 || c.G > 60 || c.B > 60 {
 		t.Fatalf("red-only Bayer frame converted to %+v", c)
 	}
-	small, err := cam.Preview(f, 16)
+	small, err := k.Preview(f, 16)
 	if err != nil || small.Bounds().Dx() != 16 || small.Bounds().Dy() != 12 {
 		t.Fatalf("preview %v, %v", small.Bounds(), err)
 	}
-	bgr, err := cam.ConvertTo(f, BGR8Packed, nil)
+	bgr, err := k.ConvertTo(f, BGR8Packed, nil)
 	if err != nil || len(bgr) != w*h*3 {
 		t.Fatalf("BGR conversion: %d bytes, %v", len(bgr), err)
 	}
-	if mid := (h/2*w + w/2) * 3; bgr[mid+2] < 100 {
-		t.Fatalf("BGR red channel = %d", bgr[mid+2])
+	if mid := (h/2*w + w/2) * 3; bgr[mid+2] < 100 || bgr[mid] > 60 {
+		t.Fatalf("BGR pixel = %v", bgr[mid:mid+3])
+	}
+	for _, q := range []BayerQuality{BayerFast, BayerOptimalPlus} {
+		if err := k.SetBayerQuality(q); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := k.Image(f); err != nil {
+			t.Fatalf("quality %d: %v", q, err)
+		}
 	}
 }
 

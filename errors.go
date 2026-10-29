@@ -66,7 +66,7 @@ var errorNames = map[uint32]string{
 	0x80000009: "version mismatch",
 	0x8000000A: "buffer too small",
 	0x8000000B: "abnormal image (lost packets)",
-	0x8000000C: "failed to load library",
+	0x8000000C: "failed to load library (on Linux, put the MVS lib directory on LD_LIBRARY_PATH)",
 	0x8000000D: "no output buffer",
 	0x8000000F: "cannot open file",
 	0x80000020: "device offline",

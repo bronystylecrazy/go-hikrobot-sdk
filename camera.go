@@ -2,7 +2,6 @@ package hikrobot
 
 import (
 	"fmt"
-	"image"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,8 +22,7 @@ type Camera struct {
 
 	pool sync.Pool // *frameStorage
 
-	convert    sync.Mutex // guards the scratch buffers below
-	small, rgb []byte
+	converter
 
 	exceptionID uintptr
 }
@@ -387,11 +385,6 @@ func (c *Camera) SetResend(enable bool, maxPercent int, timeout time.Duration) e
 	})
 }
 
-// SetBayerQuality sets the demosaicing used by Image, Preview and ConvertTo.
-func (c *Camera) SetBayerQuality(q BayerQuality) error {
-	return c.do(func(h uintptr) error { return c.sdk.check("MV_CC_SetBayerCvtQuality", h, uintptr(q)) })
-}
-
 // OnException calls fn, on its own goroutine, for each asynchronous device
 // event such as ExceptionDisconnected. A later call replaces fn.
 func (c *Camera) OnException(fn func(Exception)) error {
@@ -410,77 +403,6 @@ func (c *Camera) OnException(fn func(Exception)) error {
 		return nil
 	}
 	exceptions.set(c.exceptionID, fn)
-	return nil
-}
-
-// ConvertTo converts f to the dst pixel type (e.g. BGR8Packed for OpenCV)
-// with the SDK, reusing buf when it is large enough.
-func (c *Camera) ConvertTo(f *Frame, dst PixelType, buf []byte) ([]byte, error) {
-	if !f.Retain() {
-		return nil, errReleased
-	}
-	defer f.Release()
-	buf = grow(buf, f.Width*f.Height*dst.BitsPerPixel()/8)
-	return buf, c.convertPixels(f.Data(), f.Width, f.Height, f.PixelType, dst, buf)
-}
-
-// Image converts f to full-resolution RGBA.
-func (c *Camera) Image(f *Frame) (*image.RGBA, error) { return c.Preview(f, 0) }
-
-// Preview converts f to RGBA scaled to width pixels wide (0 keeps the full
-// size). Mono8 and 8-bit Bayer frames are downsampled before demosaicing,
-// keeping whole colour cells, which makes a small live view much cheaper than
-// converting the full frame.
-func (c *Camera) Preview(f *Frame, width int) (*image.RGBA, error) {
-	if !f.Retain() {
-		return nil, errReleased
-	}
-	defer f.Release()
-	w, h, err := previewSize(f.Width, f.Height, width)
-	if err != nil {
-		return nil, err
-	}
-	c.convert.Lock()
-	defer c.convert.Unlock()
-	src := f.Data()
-	if w != f.Width || h != f.Height {
-		if !f.PixelType.Is8BitRaw() {
-			return nil, fmt.Errorf("hikrobot: preview scaling needs Mono8 or 8-bit Bayer, got %v", f.PixelType)
-		}
-		c.small = grow(c.small, w*h)
-		if f.PixelType == Mono8 {
-			downsampleMono(src, f.Width, f.Height, w, h, c.small)
-		} else {
-			downsampleBayer(src, f.Width, f.Height, w, h, c.small)
-		}
-		src = c.small
-	}
-	if f.PixelType == RGB8Packed {
-		return rgbaFromRGB(src, w, h), nil
-	}
-	c.rgb = grow(c.rgb, w*h*3)
-	if err := c.convertPixels(src, w, h, f.PixelType, RGB8Packed, c.rgb); err != nil {
-		return nil, err
-	}
-	return rgbaFromRGB(c.rgb, w, h), nil
-}
-
-func (c *Camera) convertPixels(src []byte, width, height int, from, to PixelType, dst []byte) error {
-	if len(src) == 0 || len(dst) == 0 {
-		return fmt.Errorf("hikrobot: empty conversion buffer")
-	}
-	p := pixelConvert{Width: uint32(width), Height: uint32(height), SourcePixelType: uint32(from),
-		Source: &src[0], SourceLength: uint32(len(src)), DestinationPixelType: uint32(to),
-		Destination: &dst[0], DestinationSize: uint32(len(dst))}
-	err := c.do(func(h uintptr) error {
-		return c.sdk.check("MV_CC_ConvertPixelTypeEx", h, uintptr(unsafe.Pointer(&p)))
-	})
-	if err != nil {
-		return err
-	}
-	if int(p.DestinationLength) != len(dst) {
-		return fmt.Errorf("hikrobot: SDK converted %d bytes, expected %d", p.DestinationLength, len(dst))
-	}
 	return nil
 }
 

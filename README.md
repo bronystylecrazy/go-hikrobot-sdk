@@ -32,11 +32,29 @@ import hikrobot "github.com/bronystylecrazy/go-hikrobot-sdk"
 | Linux arm64 | `$MVCAM_COMMON_RUNENV/aarch64/libMvCameraControl.so`, else `/opt/MVS/lib/aarch64/…`, else the loader's search path |
 | macOS amd64 / arm64 | `libMvCameraControl.dylib` on the loader's search path |
 
-Pass a path to `Load` to use another location. On Linux the runtime's
-directory must be on `LD_LIBRARY_PATH` (the MVS installer's environment script
-sets it) so the runtime can find its sibling libraries. Other platforms
-compile, but `Load` returns `ErrUnsupported`. MVS 4.1 and newer runtimes are
-supported; struct layouts are checked against MVS 4.8.
+Pass a path to `Load` to use another location. Other platforms compile, but
+`Load` returns `ErrUnsupported`. MVS 4.1 and newer runtimes are supported;
+struct layouts are checked against MVS 4.8 (Windows) and 5.1 (Linux).
+
+**Linux:** the runtime loads its sibling libraries (pixel conversion,
+transport layers) by name, so its directory must be on the loader's search
+path *when your program starts*; a running process cannot add it. Either
+start the program with the MVS environment, as the installer's
+`set_env_path.sh` sets up for login shells:
+
+```sh
+export MVCAM_COMMON_RUNENV=/opt/MVS/lib
+export LD_LIBRARY_PATH=/opt/MVS/lib/aarch64:$LD_LIBRARY_PATH   # /opt/MVS/lib/64 on x86_64
+```
+
+or register it once, system-wide, which also covers systemd services:
+
+```sh
+echo /opt/MVS/lib/aarch64 | sudo tee /etc/ld.so.conf.d/mvs.conf && sudo ldconfig
+```
+
+Without either, `Load` and enumeration still work, but conversion fails with
+"failed to load library".
 
 ## Quick start
 
@@ -88,7 +106,7 @@ software-triggered) and saves a PNG.
 | Settings files | `SaveFeatures`, `LoadFeatures` |
 | Acquisition | `StartGrabbing`, `StopGrabbing`, `Grab`, `SetGrabStrategy`, `SetOutputQueueSize`, `SetImageNodeNum`, `ClearImageBuffer` |
 | GigE transport | `OptimalPacketSize` (applied on open), `SetResend` |
-| Conversion | `Image` (RGBA), `Preview` (scaled RGBA), `ConvertTo` (any SDK output, e.g. `BGR8Packed` for OpenCV), `SetBayerQuality` |
+| Conversion | `Image` (RGBA), `Preview` (scaled RGBA), `ConvertTo` (any SDK output, e.g. `BGR8Packed` for OpenCV), `SetBayerQuality`; on a `Camera`, or on a camera-free `SDK.NewConverter` for saved raw frames |
 
 Anything else in the GenICam feature tree is reachable through the node
 accessors by name; see the camera's feature list in the MVS client.
@@ -131,13 +149,17 @@ buffers, and exception callbacks arriving on a foreign thread. CI runs this on
 Linux, macOS and Windows, with and without cgo. It needs a C compiler (`cc`,
 or `gcc` on Windows) and is skipped without one.
 
-With a camera attached, the hardware tests run when asked:
+With MVS installed, the hardware tests run when asked:
 
 ```sh
+HIKROBOT_TEST=runtime go test -v -run Hardware   # no camera: load, enumerate, convert with the real SDK
+HIKROBOT_TEST=monitor go test -v -run Hardware   # + read camera nodes beside a program holding AccessControl
 HIKROBOT_TEST=grab go test -v -run Hardware      # exclusive: configures the camera and grabs
-HIKROBOT_TEST=monitor go test -v -run Hardware   # read-only, beside a program holding AccessControl
 # optional: HIKROBOT_CAMERA=<serial, IP, model or name>, HIKROBOT_SDK=<runtime path>
 ```
+
+`runtime` mode has passed against MVS 4.8 on Windows x64 and MVS 5.1 on Linux
+aarch64.
 
 ## How it works
 
@@ -147,7 +169,10 @@ go through `syscall`; Linux and macOS use
 the one float-taking function bound by signature so the value lands in a
 vector register. Go mirrors of the C structs live in [`layout.go`](layout.go), and
 `layout_test.go` pins every size and offset to values compiled from
-`CameraParams.h`. Functions missing from an older runtime fail only when you
+`CameraParams.h`. One difference matters: `MvGvspPixelType` holds both `-1`
+and values above `0x7FFFFFFF`, so GCC and Clang make it 8 bytes while MSVC
+makes it 4, and the frame-info and conversion structs differ between Windows
+and Linux/macOS. The Linux layout was confirmed against the real runtime. Functions missing from an older runtime fail only when you
 call them. No Hikrobot code or headers are included in this repository.
 
 ## License

@@ -18,6 +18,14 @@
 #define API __attribute__((visibility("default")))
 #endif
 
+// C enum MvGvspPixelType: MSVC makes it 4 bytes; GCC and Clang make it 8
+// because it holds both -1 and values above 0x7FFFFFFF.
+#ifdef _WIN32
+typedef uint32_t pixel_enum;
+#else
+typedef uint64_t pixel_enum;
+#endif
+
 typedef struct {
 	uint16_t major, minor;
 	uint32_t mac_high, mac_low, transport, dev_type, reserved[3];
@@ -50,7 +58,8 @@ typedef struct {
 } string_value;
 typedef struct {
 	uint16_t width, height;
-	uint32_t pixel_type, number, dev_time_high, dev_time_low, reserved0;
+	pixel_enum pixel_type;
+	uint32_t number, dev_time_high, dev_time_low, reserved0;
 	int64_t host_time;
 	uint32_t length, seconds, cycles, cycle_offset;
 	float gain, exposure;
@@ -70,17 +79,25 @@ typedef struct {
 	uint32_t reserved[16];
 } frame_out;
 typedef struct {
-	uint32_t width, height, src_type;
+	uint32_t width, height;
+	pixel_enum src_type;
 	unsigned char *src;
-	uint32_t src_len, dst_type;
+	uint32_t src_len;
+	pixel_enum dst_type;
 	unsigned char *dst;
 	uint32_t dst_len, dst_size, reserved[4];
 } convert_param;
 
 _Static_assert(sizeof(device_info) == 636, "device_info");
+#ifdef _WIN32
 _Static_assert(sizeof(frame_info) == 256, "frame_info");
 _Static_assert(sizeof(frame_out) == 328, "frame_out");
 _Static_assert(sizeof(convert_param) == 64, "convert_param");
+#else
+_Static_assert(sizeof(frame_info) == 264, "frame_info");
+_Static_assert(sizeof(frame_out) == 336, "frame_out");
+_Static_assert(sizeof(convert_param) == 72, "convert_param");
+#endif
 
 typedef void (*exception_cb)(unsigned int type, void *user);
 
@@ -158,6 +175,13 @@ API int MV_CC_CreateHandle(void **handle, device_info *info) {
 	c->exposure = 5000, c->width = 64, c->height = 48, c->packet = 1500;
 	c->pixel_format = BAYERGB8;
 	*handle = c;
+	return OK;
+}
+
+// A handle that is never opened, as the real SDK allows for conversion.
+API int MV_CC_CreateHandleWithoutLog(void **handle, device_info *info) {
+	if (!handle || !info || info->transport != 1) return E_PARAMETER;
+	*handle = calloc(1, sizeof(cam));
 	return OK;
 }
 

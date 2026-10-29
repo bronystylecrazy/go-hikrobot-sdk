@@ -138,6 +138,7 @@ func (s *SDK) OpenMode(d Device, mode AccessMode) (_ *Camera, err error) {
 		return nil, fmt.Errorf("hikrobot: device was not returned by Devices")
 	}
 	c := &Camera{sdk: s, device: d}
+	c.converter = converter{sdk: s, use: c.do}
 	if err = s.check("MV_CC_CreateHandle", uintptr(unsafe.Pointer(&c.handle)), uintptr(unsafe.Pointer(&d.info))); err != nil {
 		return nil, err
 	}

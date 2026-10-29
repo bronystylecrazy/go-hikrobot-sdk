@@ -59,7 +59,7 @@ func openLibrary(path string) (*library, error) {
 		}
 		errs = append(errs, err)
 	}
-	return nil, fmt.Errorf("hikrobot: load MVS runtime (is MVS installed, and its lib directory on LD_LIBRARY_PATH?): %w", errors.Join(errs...))
+	return nil, fmt.Errorf("hikrobot: load MVS runtime (is MVS installed?): %w", errors.Join(errs...))
 }
 
 func (l *library) proc(name string) (uintptr, error) {
