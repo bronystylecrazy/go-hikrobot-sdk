@@ -6,10 +6,12 @@
 Go bindings for Hikrobot machine-vision cameras (GigE Vision, USB3 Vision and
 GenTL frame grabbers) through the vendor's MVS runtime. **No cgo.**
 
-The library loads `MvCameraControl.dll` at run time, so:
+It runs on **Windows, Linux and macOS**. The MVS runtime library is loaded
+when the program runs, so:
 
-- `go build` needs no C compiler, MVS headers or import libraries;
-- you can cross-compile a Windows camera program from macOS or Linux;
+- `go build` needs no C compiler, MVS headers or import libraries, and
+  `CGO_ENABLED=0` works;
+- you can cross-compile for any supported target from any machine;
 - a machine without MVS still runs your program; `Load` just returns an
   error.
 
@@ -19,14 +21,22 @@ import hikrobot "github.com/bronystylecrazy/go-hikrobot-sdk"
 
 ## Requirements
 
-- **Windows amd64** with the [MVS client or runtime](https://www.hikrobotics.com/en/machinevision/service/download)
-  installed. The library looks for
-  `C:\Program Files (x86)\Common Files\MVS\Runtime\Win64_x64\MvCameraControl.dll`;
-  pass another path to `Load` if yours differs.
-- Go 1.22 or newer.
+- Go 1.25 or newer.
+- The [MVS client](https://www.hikrobotics.com/en/machinevision/service/download)
+  for your OS, which installs the runtime library. `Load("")` looks here:
 
-Other platforms compile, but `Load` returns `ErrUnsupported` there. MVS 4.1 and
-newer runtimes are supported; struct layouts are checked against MVS 4.8.
+| Platform | Runtime `Load("")` opens |
+|---|---|
+| Windows amd64 | `C:\Program Files (x86)\Common Files\MVS\Runtime\Win64_x64\MvCameraControl.dll` |
+| Linux amd64 | `$MVCAM_COMMON_RUNENV/64/libMvCameraControl.so`, else `/opt/MVS/lib/64/…`, else the loader's search path |
+| Linux arm64 | `$MVCAM_COMMON_RUNENV/aarch64/libMvCameraControl.so`, else `/opt/MVS/lib/aarch64/…`, else the loader's search path |
+| macOS amd64 / arm64 | `libMvCameraControl.dylib` on the loader's search path |
+
+Pass a path to `Load` to use another location. On Linux the runtime's
+directory must be on `LD_LIBRARY_PATH` (the MVS installer's environment script
+sets it) so the runtime can find its sibling libraries. Other platforms
+compile, but `Load` returns `ErrUnsupported`. MVS 4.1 and newer runtimes are
+supported; struct layouts are checked against MVS 4.8.
 
 ## Quick start
 
@@ -112,22 +122,30 @@ if errors.Is(err, hikrobot.ErrNodeNotFound) { /* feature not on this model */ }
 
 ## Testing
 
-`go test ./...` runs everywhere. It covers struct layouts against the MVS
-headers, device parsing, frame ownership and Bayer subsampling.
+`go test ./...` runs everywhere. Besides unit tests for struct layouts, device
+parsing, frame ownership and Bayer subsampling, it builds
+[`testdata/fakemvs`](testdata/fakemvs/fakemvs.c), a small stand-in for the MVS
+runtime written in C, and drives every binding through the real loading and
+calling path: integer, float and bool arguments, struct pointers, frame
+buffers, and exception callbacks arriving on a foreign thread. CI runs this on
+Linux, macOS and Windows, with and without cgo. It needs a C compiler (`cc`,
+or `gcc` on Windows) and is skipped without one.
 
-On Windows with a camera attached, the hardware tests run when asked:
+With a camera attached, the hardware tests run when asked:
 
-```powershell
-$env:HIKROBOT_TEST = "grab"      # exclusive: configures the camera and grabs
-# or "monitor": read-only, beside a program that opened with AccessControl
-$env:HIKROBOT_CAMERA = "DA1234567" # optional: serial, IP, model or name
-go test -v -run Hardware
+```sh
+HIKROBOT_TEST=grab go test -v -run Hardware      # exclusive: configures the camera and grabs
+HIKROBOT_TEST=monitor go test -v -run Hardware   # read-only, beside a program holding AccessControl
+# optional: HIKROBOT_CAMERA=<serial, IP, model or name>, HIKROBOT_SDK=<runtime path>
 ```
 
 ## How it works
 
-Each SDK function is resolved from the DLL on first use and called through
-`syscall`. Go mirrors of the C structs live in [`layout.go`](layout.go), and
+Each SDK function is resolved from the runtime on first use. Windows calls
+go through `syscall`; Linux and macOS use
+[purego](https://github.com/ebitengine/purego) (`dlopen` without cgo), with
+the one float-taking function bound by signature so the value lands in a
+vector register. Go mirrors of the C structs live in [`layout.go`](layout.go), and
 `layout_test.go` pins every size and offset to values compiled from
 `CameraParams.h`. Functions missing from an older runtime fail only when you
 call them. No Hikrobot code or headers are included in this repository.

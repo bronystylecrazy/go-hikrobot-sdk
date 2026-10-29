@@ -3,7 +3,6 @@ package hikrobot
 import (
 	"fmt"
 	"image"
-	"math"
 	"runtime"
 	"strings"
 	"sync"
@@ -227,10 +226,24 @@ func (c *Camera) GetFloat(key string) (FloatValue, error) {
 	return FloatValue{v.Current, v.Min, v.Max}, err
 }
 
-// SetFloat writes a float node. The Go runtime mirrors integer arguments
-// into XMM registers on Windows, which is where the SDK reads a float.
+// SetFloat writes a float node, e.g. "ExposureTime" in µs.
 func (c *Camera) SetFloat(key string, value float32) error {
-	return c.node("MV_CC_SetFloatValue", key, uintptr(math.Float32bits(value)))
+	name, err := cString(key)
+	if err != nil {
+		return err
+	}
+	err = c.do(func(h uintptr) error {
+		r, err := c.sdk.lib.callFloat("MV_CC_SetFloatValue", h, name, value)
+		if err != nil {
+			return err
+		}
+		if code := uint32(r); code != 0 {
+			return &Error{Op: "MV_CC_SetFloatValue(" + key + ")", Code: code}
+		}
+		return nil
+	})
+	runtime.KeepAlive(name)
+	return err
 }
 
 // EnumValue is an enumeration node's current value and the values the camera

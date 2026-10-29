@@ -1,5 +1,3 @@
-//go:build windows && amd64
-
 package hikrobot
 
 import (

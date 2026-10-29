@@ -5,9 +5,10 @@ import (
 	"fmt"
 )
 
-// ErrUnsupported is returned by Load on platforms without the MVS runtime
-// binding. Capture currently requires windows/amd64.
-var ErrUnsupported = errors.New("hikrobot: MVS capture requires windows/amd64")
+// ErrUnsupported is returned by Load on platforms this package cannot load
+// the MVS runtime on. Supported: windows/amd64, linux/amd64, linux/arm64,
+// darwin/amd64 and darwin/arm64.
+var ErrUnsupported = errors.New("hikrobot: MVS is not supported on this platform")
 
 // ErrClosed is returned by calls on a closed Camera.
 var ErrClosed = errors.New("hikrobot: camera is closed")

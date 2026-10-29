@@ -4,10 +4,12 @@ package hikrobot
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
+	"unsafe"
 )
 
 // DefaultRuntimePath is where the MVS installer puts the 64-bit runtime.
@@ -76,6 +78,13 @@ func (l *library) call(name string, args ...uintptr) (uintptr, error) {
 	}
 	r, _, _ := p.Call(args...)
 	return r, nil
+}
+
+// callFloat calls MV_CC_SetFloatValue(handle, key, value). The Go runtime
+// copies each integer argument into the matching XMM register on Windows,
+// which is where the callee reads a float.
+func (l *library) callFloat(name string, handle uintptr, key *byte, value float32) (uintptr, error) {
+	return l.call(name, handle, uintptr(unsafe.Pointer(key)), uintptr(math.Float32bits(value)))
 }
 
 func (l *library) close() { _ = l.dll.Release() }

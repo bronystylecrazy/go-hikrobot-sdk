@@ -11,11 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go: ["1.22", stable]
-        exclude:
-          # Go 1.22 binaries lack LC_UUID, which current macOS refuses to run.
-          - os: macos-latest
-            go: "1.22"
+        go: ["1.25", stable]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +19,16 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
-      - run: go test ./...
-      - name: Cross-compile for Windows
+      - run: go test -race ./...
+      - name: Test without cgo
         if: runner.os != 'Windows'
-        run: GOOS=windows GOARCH=amd64 go vet ./... && GOOS=windows GOARCH=amd64 go build ./...
+        run: CGO_ENABLED=0 go test ./...
+      - name: Cross-compile
+        if: runner.os != 'Windows'
+        run: |
+          for target in windows/amd64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 freebsd/amd64 linux/386; do
+            GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go vet ./... || exit 1
+          done
       - name: gofmt
         if: matrix.go == 'stable' && runner.os == 'Linux'
         run: test -z "$(gofmt -l .)"

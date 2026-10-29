@@ -1,10 +1,12 @@
 // Package hikrobot drives Hikrobot machine-vision cameras (GigE Vision, USB3
-// Vision and GenTL frame grabbers) through the vendor's MVS runtime,
-// MvCameraControl.dll, without cgo.
+// Vision and GenTL frame grabbers) through the vendor's MVS runtime, without
+// cgo.
 //
-// The runtime is loaded by Load at run time, so programs build on any platform
-// and cross-compile without the MVS headers or a C toolchain. Capture works on
-// windows/amd64 with MVS installed; elsewhere Load returns ErrUnsupported.
+// The runtime (MvCameraControl.dll, libMvCameraControl.so or .dylib) is
+// loaded by Load at run time, so programs build on any platform and
+// cross-compile without the MVS headers or a C toolchain. Capture works on
+// Windows, Linux and macOS (amd64 and arm64; Windows amd64 only) wherever MVS
+// is installed; elsewhere Load returns ErrUnsupported.
 //
 // A minimal capture loop:
 //
