@@ -30,7 +30,11 @@ import hikrobot "github.com/bronystylecrazy/go-hikrobot-sdk"
 | Windows amd64 | `C:\Program Files (x86)\Common Files\MVS\Runtime\Win64_x64\MvCameraControl.dll` |
 | Linux amd64 | `$MVCAM_COMMON_RUNENV/64/libMvCameraControl.so`, else `/opt/MVS/lib/64/…`, else the loader's search path |
 | Linux arm64 | `$MVCAM_COMMON_RUNENV/aarch64/libMvCameraControl.so`, else `/opt/MVS/lib/aarch64/…`, else the loader's search path |
-| macOS amd64 / arm64 | `libMvCameraControl.dylib` on the loader's search path |
+| macOS amd64 / arm64 | `/Library/Frameworks/MvCameraControl.framework/MvCameraControl` |
+
+On macOS, the MVS `.dmg` installs the runtime framework (the
+`MVS_SDK_*_Runtime.pkg` inside it is enough). It is a universal binary, so
+both Apple Silicon and Intel builds work.
 
 Pass a path to `Load` to use another location. Other platforms compile, but
 `Load` returns `ErrUnsupported`. MVS 4.1 and newer runtimes are supported;
@@ -158,8 +162,9 @@ HIKROBOT_TEST=grab go test -v -run Hardware      # exclusive: configures the cam
 # optional: HIKROBOT_CAMERA=<serial, IP, model or name>, HIKROBOT_SDK=<runtime path>
 ```
 
-`runtime` mode has passed against MVS 4.8 on Windows x64 and MVS 5.1 on Linux
-aarch64.
+`runtime` mode has passed against the real runtimes of MVS 4.8 on Windows
+x64, MVS 5.1 on Linux aarch64, and MVS 5.0 (SDK 4.7) on macOS arm64 and
+x86_64.
 
 ## How it works
 

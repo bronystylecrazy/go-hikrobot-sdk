@@ -14,12 +14,12 @@ import (
 	"github.com/ebitengine/purego"
 )
 
-// DefaultRuntimePath is where the MVS installer puts the runtime: under
-// $MVCAM_COMMON_RUNENV (set by the installer) or /opt/MVS/lib on Linux. On
-// macOS it is the bare library name, resolved by the dynamic loader.
+// DefaultRuntimePath is where the MVS installer puts the runtime: the
+// MvCameraControl framework on macOS; on Linux, under $MVCAM_COMMON_RUNENV
+// (set by the installer) or /opt/MVS/lib.
 func DefaultRuntimePath() string {
 	if runtime.GOOS == "darwin" {
-		return "libMvCameraControl.dylib"
+		return "/Library/Frameworks/MvCameraControl.framework/MvCameraControl"
 	}
 	root := os.Getenv("MVCAM_COMMON_RUNENV")
 	if root == "" {
@@ -44,11 +44,11 @@ type library struct {
 func openLibrary(path string) (*library, error) {
 	candidates := []string{path}
 	if path == "" {
-		// Fall back to the loader's own search (LD_LIBRARY_PATH, ld.so.cache,
-		// DYLD_LIBRARY_PATH) when the default install path is absent.
-		candidates = []string{DefaultRuntimePath(), "libMvCameraControl.so", "libMvCameraControl.dylib"}
+		// Fall back to the loader's own search (LD_LIBRARY_PATH and
+		// ld.so.cache, or DYLD_FRAMEWORK_PATH) when the default is absent.
+		candidates = []string{DefaultRuntimePath(), "libMvCameraControl.so"}
 		if runtime.GOOS == "darwin" {
-			candidates = candidates[2:]
+			candidates[1] = "MvCameraControl.framework/MvCameraControl"
 		}
 	}
 	var errs []error
