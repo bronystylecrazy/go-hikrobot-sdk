@@ -25,6 +25,9 @@ func loadFake(t *testing.T) *SDK {
 		}
 	}
 	if _, err := exec.LookPath(cc); err != nil {
+		if os.Getenv("HIKROBOT_REQUIRE_FAKE") != "" {
+			t.Fatalf("no C compiler (%s) to build the fake MVS runtime", cc)
+		}
 		t.Skipf("no C compiler (%s) to build the fake MVS runtime", cc)
 	}
 	name := map[string]string{"windows": "fakemvs.dll", "darwin": "libfakemvs.dylib"}[runtime.GOOS]
